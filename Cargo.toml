@@ -1,0 +1,28 @@
+[package]
+authors = [ "Stygian Labs <dd@stygianlabs.com>" ]
+edition = "2021"
+name    = "stygian-atomic-swap"
+version = "0.0.1"
+
+[lib]
+crate-type = [ "cdylib", "rlib" ]
+
+[dependencies]
+near-sdk                       = "3.1.0"
+serde                          = { version = "1.0", features = [ "derive" ] }
+serde_json                     = "1.0"
+
+[dev-dependencies]
+near-sdk-sim = "3.2.0"
+
+[profile.release]
+codegen-units = 1
+debug         = false
+lto           = true
+opt-level     = "z"
+panic         = "abort"
+# Opt into extra safety checks on arithmetic operations https://stackoverflow.com/a/64136471/249801
+overflow-checks = true
+
+[workspace]
+members = [  ]
