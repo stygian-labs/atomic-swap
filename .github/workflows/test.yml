@@ -1,0 +1,24 @@
+name: Test atomic swap
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+jobs:
+  test:
+    runs-on: ${{ matrix.platform }}
+    name: "${{ matrix.platform }} ${{ matrix.toolchain }}"
+    strategy:
+      matrix:
+        platform: [ubuntu-latest]
+        toolchain: [stable, 1.56.0]
+    steps:
+      - uses: actions/checkout@v2
+      - name: "${{ matrix.toolchain }} with rustfmt, and wasm32"
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.toolchain }}
+      - uses: Swatinem/rust-cache@v1
+      - name: Test
+        run: cargo test
