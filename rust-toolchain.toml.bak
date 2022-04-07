@@ -1,0 +1,5 @@
+[toolchain]
+channel = "nightly-2021-12-06"
+components = [ "rustfmt", "rustc-dev" ]
+targets = [ "wasm32-unknown-unknown", "aarch64-apple-darwin", "x86_64-apple-darwin" ]
+profile = "minimal"
