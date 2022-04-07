@@ -97,7 +97,7 @@ impl AtomicSwap {
     #[private]
     fn revert(&mut self) -> Promise {
         Promise::new(env::predecessor_account_id())
-            .transfer(env::account_balance())
+            .transfer(self.amount.0 + (self.amount.0 / 10))
             .then(self.progress(State::Revert))
     }
 

@@ -1,0 +1,60 @@
+env_files = [
+    { path = "./neardev/dev-account.env" }
+]
+
+[env]
+LOCK_TIME = 1000
+RECIPIENT = "awesomeibex.testnet"
+CARGO_MAKE_EXTEND_WORKSPACE_MAKEFILE = true
+ACCOUNT_ID = "awesomeibex.testnet"
+
+[tasks.build]
+workspace = false
+command = "cargo"
+args = ["build", "--target", "wasm32-unknown-unknown", "--release"]
+
+[tasks.deploy]
+workspace = false
+command = "near"
+args = [
+    "dev-deploy",
+    "-f", "target/wasm32-unknown-unknown/release/stygian_atomic_swap.wasm",
+    "new",
+    '{"amount":"2", "recipient":"${RECIPIENT}", "secret_hash":[1,1,1,1], "lock_time":${LOCK_TIME}}',
+    "30000000000000",
+    "1"
+]
+dependencies = ["build"]
+
+[tasks.check_lock]
+workspace = false
+command = "near"
+args = [
+    "view",
+    "${CONTRACT_NAME}",
+    "check_lock"
+]
+
+[tasks.get_state]
+workspace = false
+command = "near"
+args = [
+    "view",
+    "${CONTRACT_NAME}",
+    "get_state"
+]
+
+[tasks.claim]
+workspace = false
+command = "near"
+args = [
+    "call",
+    "${CONTRACT_NAME}",
+    "claim",
+    '{"secret_hash":[1,1,1,1]}',
+    "--account-id", "${ACCOUNT_ID}"
+]
+
+[tasks.deploy-all]
+workspace = false
+dependencies = ["deploy", "check_lock", "get_state"]

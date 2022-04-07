@@ -43,13 +43,16 @@ Install dependencies
 npm install
 ```
 
+Install cargo-make for fast deployment:
+```
+cargo install --force cargo-make
+```
+
 ## Quick Start
 
 To run this project locally:
 
 1. Prerequisites: Make sure you have Node.js ≥ 12 installed (https://nodejs.org), then use it to install yarn: `npm install --global yarn` (or just `npm i -g yarn`)
-2. Run the local development server: `yarn && yarn dev` (see package.json for a full list of scripts you can run with yarn)
-   Now you'll have a local development environment backed by the NEAR TestNet! Running yarn dev will tell you the URL you can visit in your browser to see the app.
 
 ## Building this contract
 
@@ -81,9 +84,7 @@ rustup target add wasm32-unknown-unknown
 
 ## Using this contract
 
-### Web app
-
-Deploy the smart contract to a specific account created with the NEAR Wallet. Then interact with the smart contract using near-api-js on the frontend.
+### Quick test
 
 If you do not have a NEAR account, please create one with [NEAR Wallet](https://wallet.testnet.near.org).
 
@@ -93,56 +94,53 @@ Make sure you have credentials saved locally for the account you want to deploy 
 near login
 ```
 
-Deploy the contract to your NEAR account:
-
-```bash
-near deploy --wasmFile res/stygian_atomic_swap.wasm --accountId YOUR_ACCOUNT_NAME
-```
-
-Build the frontend:
-
-```bash
-npm start
-```
-
-If all is successful the app should be live at `localhost:1234`!
-
 ### Quickest deploy
 
-Build and deploy this smart contract to an development account. This development account will be created automatically and is not intended to be permanent. Please see the "Standard deploy" section for creating a more personalized account to deploy to.
+At the root of this repo, we have a `Makefile.toml` that provides some quick commands for deployment.
 
+Important configurations are in the `[env]` section.
+
+To deploy, run:
 ```bash
-near dev-deploy --wasmFile res/stygian_atomic_swap.wasm --helperUrl https://near-contract-helper.onrender.com
+cargo make deploy-all
 ```
 
-Behind the scenes, this is creating an account and deploying a contract to it. On the console, notice a message like:
+This will deploy, check the lock and call get_state.
 
-> Done deploying to dev-1234567890123
+If you want to change the root parameters, you can do so at the command line, like so:
 
-In this instance, the account is `dev-1234567890123`. A file has been created containing the key to the account, located at `neardev/dev-account`. To make the next few steps easier, we're going to set an environment variable containing this development account id and use that when copy/pasting commands.
-Run this command to the environment variable:
+`cargo make -e LOCK_TIME=1 deploy-all`
 
+You can also manually call individual tasks like so:
 ```bash
-source neardev/dev-account.env
+cargo make check_lock
 ```
 
-You can tell if the environment variable is set correctly if your command line prints the account name after this command:
+So let's go through some user flows, starting with the standard swap, in which the recipient claims the funds with a valid key:
 
 ```bash
-echo $CONTRACT_NAME
+cargo make deploy-all
+cargo make claim
 ```
 
-The next command will call the contract's `set_status` method:
+Try and claim again, you'll see you can't claim something thats already claimed.
+
+The next one is a swap where the callee tries to claim the funds before the lock has passed.
 
 ```bash
-near call $CONTRACT_NAME set_status '{"message": "aloha!"}' --accountId $CONTRACT_NAME
+cargo make -e RECIPIENT="bob.testnet" deploy-all
+cargo make claim
 ```
 
-To retrieve the message from the contract, call `get_status` with the following:
+You should see a failure since only the recipient can make a claim before the lock has surpassed.
 
+What about if the lock has surpassed, can we revert?
 ```bash
-near view $CONTRACT_NAME get_status '{"account_id": "'$CONTRACT_NAME'"}'
+cargo make -e LOCK_TIME="0" deploy-all
+cargo make claim
 ```
+ 
+
 
 ### Standard deploy
 
