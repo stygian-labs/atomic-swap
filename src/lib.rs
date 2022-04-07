@@ -42,6 +42,7 @@ type Error = String;
 #[near_bindgen]
 impl AtomicSwap {
     #[init]
+    #[payable]
     pub fn new(amount: U128, recipient: AccountId, secret_hash: Vec<u8>, lock_time: u64) -> Self {
         require!(
             env::attached_deposit() >= amount.0,
@@ -57,7 +58,12 @@ impl AtomicSwap {
         }
     }
 
-    fn claim(&mut self, secret_hash: Vec<u8>) -> Promise {
+    pub fn claim(&mut self, secret_hash: Vec<u8>) -> Promise {
+        require!(
+            self.state == State::Init,
+            "You can only claim if the swap is in Init state"
+        );
+
         self.progress(State::Claim);
 
         if let Err(err) = self.check_lock() {
@@ -76,7 +82,7 @@ impl AtomicSwap {
         }
     }
 
-    fn check_lock(&self) -> Result<(), Error> {
+    pub fn check_lock(&self) -> Result<(), Error> {
         if env::block_height() > self.lock_free {
             Err("Lock time has exceeded".to_string())
         } else {
@@ -84,7 +90,7 @@ impl AtomicSwap {
         }
     }
 
-    fn get_state(&self) -> &State {
+    pub fn get_state(&self) -> &State {
         &self.state
     }
 
@@ -100,10 +106,9 @@ impl AtomicSwap {
         Promise::new(self.recipient.clone())
             .transfer(self.amount.0)
             .then(self.progress(State::Commit))
-            .then(
-                Promise::new(env::predecessor_account_id())
-                    .transfer(env::account_balance() - self.amount.0),
-            )
+            .then(Promise::new(env::predecessor_account_id()).transfer(
+                (env::account_balance() - self.amount.0) / 10 - env::storage_usage() as u128,
+            ))
     }
 
     #[private]
@@ -221,4 +226,7 @@ mod tests {
         // Ensures the deposit was removed from the balance
         assert_eq!(env::account_balance(), 0);
     }
+
+    // TODO: cannot claim twice
+    // TODO: funds are dumped
 }
