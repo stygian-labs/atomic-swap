@@ -1,3 +1,4 @@
+use near_sdk::json_types::ValidAccountId;
 use near_sdk::{
     borsh::{self, BorshDeserialize, BorshSerialize},
     json_types::U128,
@@ -26,6 +27,7 @@ impl State {
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault, Serialize)]
 #[serde(crate = "near_sdk::serde")]
 pub struct AtomicSwap {
+    owner: AccountId,
     /// Amount to swap
     amount: U128,
     /// Where the funds are going to
@@ -45,11 +47,12 @@ impl AtomicSwap {
     #[payable]
     pub fn new(amount: U128, recipient: AccountId, secret_hash: Vec<u8>, lock_time: u64) -> Self {
         require!(
-            env::attached_deposit() >= amount.0,
-            "You must deposit at least the amount"
+            env::attached_deposit() >= (amount.0 + (amount.0 / 100 * 10)),
+            "You must deposit at least the amount plus 10%"
         );
 
         AtomicSwap {
+            owner: env::predecessor_account_id(),
             amount,
             recipient,
             secret_hash,
@@ -96,8 +99,8 @@ impl AtomicSwap {
 
     #[private]
     fn revert(&mut self) -> Promise {
-        Promise::new(env::predecessor_account_id())
-            .transfer(self.amount.0 + (self.amount.0 / 10))
+        Promise::new(self.owner.clone())
+            .transfer(env::account_balance() - env::storage_usage() as u128)
             .then(self.progress(State::Revert))
     }
 
@@ -105,10 +108,10 @@ impl AtomicSwap {
     fn commit(&mut self) -> Promise {
         Promise::new(self.recipient.clone())
             .transfer(self.amount.0)
-            .then(self.progress(State::Commit))
-            .then(Promise::new(env::predecessor_account_id()).transfer(
+            .then(Promise::new(self.owner.clone()).transfer(
                 (env::account_balance() - self.amount.0) / 10 - env::storage_usage() as u128,
             ))
+            .then(self.progress(State::Commit))
     }
 
     #[private]
@@ -126,7 +129,8 @@ mod tests {
     use near_sdk::test_utils::{accounts, VMContextBuilder};
     use near_sdk::testing_env;
 
-    const DEPOSIT: u128 = 10_u128.pow(24);
+    const SWAP_AMT: u128 = 10_u128.pow(24);
+    const TRUST_FEE: u128 = (SWAP_AMT / 100) * 10;
 
     fn get_context(signer_account_id: AccountId) -> VMContextBuilder {
         let mut builder = VMContextBuilder::new();
@@ -134,7 +138,7 @@ mod tests {
             .current_account_id(accounts(0))
             .signer_account_id(signer_account_id.clone())
             .predecessor_account_id(accounts(0))
-            .attached_deposit(DEPOSIT);
+            .attached_deposit(SWAP_AMT + TRUST_FEE);
         builder
     }
 
@@ -152,7 +156,7 @@ mod tests {
         let secret_hash = env::sha256("secret_hash".as_bytes());
         let lock_time: u64 = 100;
 
-        let contract = AtomicSwap::new(DEPOSIT.into(), bob, secret_hash, lock_time.into());
+        let contract = AtomicSwap::new(SWAP_AMT.into(), bob, secret_hash, lock_time.into());
 
         assert!(contract.check_lock().is_ok());
     }
@@ -168,7 +172,7 @@ mod tests {
         let secret_hash = env::sha256("secret_hash".as_bytes());
         let lock_time: u64 = 100;
 
-        let mut contract = AtomicSwap::new(DEPOSIT.into(), bob, secret_hash, lock_time.into());
+        let mut contract = AtomicSwap::new(SWAP_AMT.into(), bob, secret_hash, lock_time.into());
 
         contract.claim(env::sha256("failed_secret_hash".as_bytes()));
     }
@@ -182,7 +186,7 @@ mod tests {
         let secret_hash = env::sha256("secret_hash".as_bytes());
         let lock_time: u64 = 100;
 
-        let mut contract = AtomicSwap::new(DEPOSIT.into(), bob, secret_hash, lock_time.into());
+        let mut contract = AtomicSwap::new(SWAP_AMT.into(), bob, secret_hash, lock_time.into());
 
         contract.claim(env::sha256("failed_secret_hash".as_bytes()));
     }
@@ -196,16 +200,18 @@ mod tests {
         let lock_time: u64 = 100;
 
         let mut contract =
-            AtomicSwap::new(DEPOSIT.into(), bob, secret_hash.clone(), lock_time.into());
+            AtomicSwap::new(SWAP_AMT.into(), bob, secret_hash.clone(), lock_time.into());
 
         testing_env!(context.block_index(1_000_000).build());
 
-        assert_eq!(env::attached_deposit(), DEPOSIT);
+        let prev_balance = env::account_balance();
+        let additional_funds = prev_balance - (SWAP_AMT + TRUST_FEE);
 
-        contract.claim(secret_hash);
+        contract.claim(secret_hash).as_return();
 
-        // Ensures the deposit was removed from the balance
-        assert_eq!(env::account_balance(), 0);
+        let new_balance = env::account_balance();
+
+        assert_eq!(new_balance, 307200);
     }
 
     #[test]
@@ -217,16 +223,17 @@ mod tests {
         let lock_time: u64 = 100;
 
         let mut contract =
-            AtomicSwap::new(DEPOSIT.into(), bob, secret_hash.clone(), lock_time.into());
+            AtomicSwap::new(SWAP_AMT.into(), bob, secret_hash.clone(), lock_time.into());
 
-        assert_eq!(env::attached_deposit(), DEPOSIT);
+        assert!(env::account_balance() > SWAP_AMT);
 
-        contract.claim(secret_hash);
+        let prev_balance = env::account_balance();
+        let additional_funds = prev_balance - (SWAP_AMT + TRUST_FEE);
 
-        // Ensures the deposit was removed from the balance
-        assert_eq!(env::account_balance(), 0);
+        contract.claim(secret_hash).as_return();
+
+        let new_balance = env::account_balance();
+
+        assert!(new_balance < prev_balance - (SWAP_AMT + TRUST_FEE));
     }
-
-    // TODO: cannot claim twice
-    // TODO: funds are dumped
 }
